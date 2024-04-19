@@ -243,7 +243,7 @@ class MfaAlignments:
                 ])
             else:
                 subprocess.run([
-                    '/opt/mfa/bin/mfa_train_and_align', '-v', '-t', tmpdir,
+                    '/opt/mfa/bin/mfa_train_and_align', '-v', '-t', mfa_cache_path,
                     corpus_path, dictionary_path, f'{path}/{character}'
                 ])
 
@@ -269,6 +269,6 @@ class MfaDebugger:
         pass
 
 
-# character MFA has trouble with
+# characters MFA has trouble with:
 # word = word.replace('-', '').replace("'", '')
 # pronunciation = pronunciation.replace('-', '').replace("'", '')
