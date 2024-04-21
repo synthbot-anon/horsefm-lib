@@ -1,8 +1,11 @@
 """ """
 
+from collections import defaultdict
 import dataclasses
 import os
 from typing import Dict, Set
+
+import pandas
 
 from .. import common
 from .. import clipper
@@ -12,7 +15,6 @@ from ..datasets import clipper_other_values
 
 class ClipperParamsHelper(clipper.ClipperParams):
     _rootdir: str
-    _rootlen: int
     known_characters: Dict
     known_tags: Dict
     known_noise_levels: Dict
@@ -23,37 +25,36 @@ class ClipperParamsHelper(clipper.ClipperParams):
     unknown_sources: Set = set()
 
     def __init__(
-        self, clipper_root, characters=None, tags=None, noise_levels=None, sources=None
+        self, masterfile_1, masterfile_2, characters=None, tags=None, noise_levels=None, sources=None
     ):
-        self.rootdir = clipper_root
+        self.rootdir1 = masterfile_1
+        self.rootdir2 = masterfile_2
         self.known_characters = characters or {}
         self.known_tags = tags or {}
         self.known_noise_levels = noise_levels or {}
         self.known_sources = sources or {}
 
-    @property
-    def rootdir(self) -> str:
-        return self._rootdir
-
-    @rootdir.setter
-    def rootdir(self, value: str):
-        self._rootdir = os.path.normpath(value)
-        self._rootlen = len(self._rootdir)
 
     def relpath(self, filepath: str):
         normpath = os.path.normpath(filepath)
 
-        if not normpath.startswith(self.rootdir):
+        if normpath.startswith(self.rootdir1):
+            rootdir = 'masterfile1/'
+            rootlen = len(self.rootdir1)
+        elif normpath.startswith(self.rootdir2):
+            rootdir = 'masterfile2/'
+            rootlen = len(self.rootdir2)
+        else:
             raise ValueError(
                 'cannot take the relative path of "{}" since it is not under "{}"'.format(
-                    normpath, self.rootdir
+                    normpath, self.rootdir1
                 )
             )
 
-        if normpath == self.rootdir:
+        if normpath == rootdir:
             return ""
 
-        return normpath[self._rootlen + 1 :]
+        return rootdir + normpath[rootlen + 1:]
 
     def characters(self, candidate, path):
         if candidate in self.known_characters:
@@ -103,9 +104,36 @@ class ClipperParamsHelper(clipper.ClipperParams):
 
 
 class MlpDialogueParams(ClipperParamsHelper):
-    def __init__(self, clipper_root):
+    def __init__(self, masterfile_1, masterfile_2):
         super(MlpDialogueParams, self).__init__(
-            clipper_root,
+            masterfile_1,
+            masterfile_2,
+            characters=clipper_mlp_values.CHARACTERS,
+            tags=clipper_mlp_values.TAGS,
+            noise_levels=clipper_mlp_values.NOISE,
+        )
+
+    def sources(self, candidate, path):
+        relpath = self.relpath(candidate)
+
+        if relpath.endswith("labels.txt"):
+            relpath = os.path.dirname(relpath)
+
+        if relpath in clipper_mlp_values.SOURCES:
+            return clipper_mlp_values.SOURCES[relpath]
+
+        if candidate not in self.unknown_sources:
+            print("unknown source", candidate, "for", path)
+            self.unknown_sources.add(candidate)
+
+        # default result
+        return candidate
+
+class MlpSfxParams(ClipperParamsHelper):
+    def __init__(self, masterfile_1, masterfile_2):
+        super(MlpSfxParams, self).__init__(
+            masterfile_1,
+            masterfile_2,
             characters=clipper_mlp_values.CHARACTERS,
             tags=clipper_mlp_values.TAGS,
             noise_levels=clipper_mlp_values.NOISE,
@@ -128,8 +156,8 @@ class MlpDialogueParams(ClipperParamsHelper):
         return candidate
 
 
-def mlp_dialogue_dataset(clipper_root):
-    params = MlpDialogueParams(clipper_root)
+def mlp_dialogue_dataset(masterfile_1, masterfile_2):
+    params = MlpDialogueParams(masterfile_1, masterfile_2)
     dataset = clipper.ClipperSet(params)
 
     print("warning: ignoring ponysorter files")
@@ -141,12 +169,18 @@ def mlp_dialogue_dataset(clipper_root):
         #pass
 
     clip_directories = [
-        f"{clipper_root}/Sliced Dialogue/EQG",
-        f"{clipper_root}/Sliced Dialogue/FiM",
+        f"{masterfile_1}/Sliced Dialogue/EQG",
+        f"{masterfile_1}/Sliced Dialogue/FiM",
         #f"{clipper_root}/Sliced Dialogue/MLP Movie",
-        f"{clipper_root}/Sliced Dialogue/Special source",
+        f"{masterfile_1}/Sliced Dialogue/Special source",
         # f"{clipper_root}/Sliced Dialogue/Other/Mobile game",
     ]
+
+    if masterfile_2 != None:
+        clip_directories.extend([
+            f"{masterfile_2}/Songs",
+        ])
+
 
     for clip_directory in clip_directories:
         print("loading", clip_directory)
@@ -164,68 +198,79 @@ def mlp_dialogue_dataset(clipper_root):
                 else:
                     print(f"Unexpected file: {root}/{filename}")
 
-    for entry in os.scandir(f"{clipper_root}/Sliced Dialogue/Label files"):
+    for entry in os.scandir(f"{masterfile_1}/Sliced Dialogue/Label files"):
         if entry.name.endswith("_sfx.txt"):
             continue
         if entry.name.endswith('_music.txt'):
             continue
         if not entry.is_file():
             continue
-        if entry.name == "songs.txt":
-            continue
         if not entry.name.endswith(".txt"):
             continue
 
         dataset.load_audacity(entry.path)
 
-    #dataset.load_audacity(f"{clipper_root}/Sliced Dialogue/MLP Movie/labels.txt")
-
     return dataset
 
 
-class MlpSongParams(ClipperParamsHelper):
-    def __init__(self, clipper_root):
-        super(MlpSongParams, self).__init__(
-            clipper_root,
-            characters=clipper_mlp_values.CHARACTERS,
-            tags=clipper_mlp_values.TAGS,
-            noise_levels=clipper_mlp_values.NOISE,
-            sources={
-                "Sliced Dialogue/Songs": "fim:songs",
-                "Sliced Dialogue/Label files/songs.txt": "fim:songs",
-            },
-        )
 
-
-def mlp_song_dataset(clipper_root):
-    params = MlpSongParams(clipper_root)
-    dataset = clipper.ClipperSet(params)
-
-    for entry in os.scandir(f"{clipper_root}/Songs/"):
-        if not entry.is_file():
-            print(f"Unexpected directory: Songs/{entry.name}")
-            continue
-
-        if entry.name.endswith(".txt"):
-            dataset.load_transcript(entry.path)
-        elif entry.name.endswith(".flac"):
-            dataset.load_audio(entry.path)
-        else:
-            print(f"Unexpected file: Songs/{entry.name}")
-
-    dataset.load_audacity(f"{clipper_root}/Sliced Dialogue/Label files/songs.txt")
-
-    return dataset
-
-
-def mlp_sfx_params():
+def mlp_sfx_params(masterfile_1, masterfile_2):
     # todo: convert m4a to flac
     # todo: restructure sfx sounds
     # ... source (e.g., Hoers, Rain, character) / Tag number.flac
 
     # todo: allow manually adding tags/records to a clipperset
     # maybe post_audio vs put_audio
-    pass
+
+    clip_directories = [
+        f"{masterfile_2}/SFX and Music/Music",
+        f"{masterfile_2}/SFX and Music/SFX",
+    ]
+
+    audio_files = defaultdict(dict)
+
+    for clip_directory in clip_directories:
+        print("loading", clip_directory)
+        for root, dirs, files in os.walk(clip_directory):
+            for filename in files:
+                print('parsing', filename)
+                if filename.endswith(".flac"):
+                    name = os.path.splitext(filename)[0]
+                    parts = name.split('~')
+                    audio_files[name] = {
+                        'name': name,
+                        'path': os.path.join(root, filename),
+                        'tags': [x.strip() for x in name.split('~')[0].split(',')],
+                        'source': name.split('~')[1].split('-')[0].strip() if len(parts) > 1 else None,
+                    }
+                else:
+                    print(f"Unexpected file: {root}/{filename}")
+
+    for entry in os.scandir(f"{masterfile_1}/Sliced Dialogue/Label files"):
+        if not entry.is_file():
+            continue
+        if not entry.name.endswith("_sfx.txt") and not entry.name.endswith('_music.txt'):
+            continue
+
+        with open(entry.path, 'r', encoding='iso-8859-1') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+
+                start, end, name = line.split('\t')
+
+                # if name not in audio_files:
+                #     print(f"Unknown audio file: {name}")
+                #     continue
+
+                audio_files[name].update({
+                    'name': name,
+                    'start': start,
+                    'end': end,
+                })
+
+    return pandas.DataFrame(audio_files.values())
 
 
 class ExtraDialogueParams(ClipperParamsHelper):
