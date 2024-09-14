@@ -165,7 +165,7 @@ class PhoneticDictionaryDebugger:
         for data in audio.itertuples():
             if pandas.isna(data.audio_path) or pandas.isna(data.transcript):
                 continue
-                
+
             transcript_words = re.split(r"[ ]", data.transcript)
             transcript_words = [x for x in transcript_words if x]
 

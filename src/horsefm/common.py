@@ -87,6 +87,7 @@ def logger(verbose):
     else:
         return NoopLogger()
 
+
 class TemporaryDirectory:
     def __init__(self, suffix=None, prefix=None, dir=None):
         self.tmpdir = tempfile.TemporaryDirectory(suffix, prefix, dir)
@@ -104,7 +105,9 @@ class TemporaryDirectory:
 
     def subdir(self, name):
         if not self.is_open:
-            raise Exception('call this function within a TemporaryDirectory context (with)')
+            raise Exception(
+                "call this function within a TemporaryDirectory context (with)"
+            )
 
         path = os.path.join(self.path, name)
         os.makedirs(path, exist_ok=True)

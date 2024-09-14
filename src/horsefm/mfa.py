@@ -13,15 +13,15 @@ import pandas
 import praatio.tgio
 
 
-def write_transcript_textgrid(transcript: str, duration: float,
-                              output_path: str):
-    normalized = re.sub(r'[.?!,;"]', ' ', transcript)
-    normalized = normalized.replace('-', '').replace("'", '')
+def write_transcript_textgrid(transcript: str, duration: float, output_path: str):
+    normalized = re.sub(r'[.?!,;"]', " ", transcript)
+    normalized = normalized.replace("-", "").replace("'", "")
 
     textgrid = praatio.tgio.Textgrid()
     utterance = praatio.tgio.IntervalTier("utt", [], 0, duration)
     utterance.insertEntry(
-        praatio.tgio.Interval(start=0, end=duration, label=normalized))
+        praatio.tgio.Interval(start=0, end=duration, label=normalized)
+    )
     textgrid.addTier(utterance)
 
     textgrid.save(output_path, useShortForm=False)
@@ -29,7 +29,6 @@ def write_transcript_textgrid(transcript: str, duration: float,
 
 class MfaDictionaryGeneratorPaths:
     def __init__(self, path):
-
         self.generated_dictionary_dir = f"{path}/generated_dictionaries"
         os.makedirs(self.generated_dictionary_dir, exist_ok=True)
 
@@ -67,14 +66,16 @@ class MfaDictionaryGenerator:
                 cwd="/opt/mfa",
             )
 
-            return [dictionary_path, 'g2p_dictionary', character]
+            return [dictionary_path, "g2p_dictionary", character]
 
         result = Parallel(n_jobs=-1)(
-            delayed(generate_dictionary)(row) for row in tqdm.tqdm(
-                self.corpus.itertuples(), "Generating character dictionary"))
+            delayed(generate_dictionary)(row)
+            for row in tqdm.tqdm(
+                self.corpus.itertuples(), "Generating character dictionary"
+            )
+        )
 
-        return pandas.DataFrame(result,
-                                columns=['path', 'contents', 'character'])
+        return pandas.DataFrame(result, columns=["path", "contents", "character"])
 
     def dump_g2p_model(self, path):
         train_dictionary_path = f"{path}/training_dictionary.txt"
@@ -82,10 +83,9 @@ class MfaDictionaryGenerator:
         os.makedirs(path, exist_ok=True)
 
         dictionary_data = pandas.concat(self.dictionaries)
-        dictionary_data.to_csv(train_dictionary_path,
-                               sep='\t',
-                               index=False,
-                               header=False)
+        dictionary_data.to_csv(
+            train_dictionary_path, sep="\t", index=False, header=False
+        )
 
         subprocess.run(
             [
@@ -96,16 +96,21 @@ class MfaDictionaryGenerator:
             cwd="/opt/mfa",
         )
 
-        return pandas.DataFrame([{
-            'path': generated_model_path,
-            'contents': 'g2p_model',
-        }])
+        return pandas.DataFrame(
+            [
+                {
+                    "path": generated_model_path,
+                    "contents": "g2p_model",
+                }
+            ]
+        )
 
     def dump_dictionaries(self, path):
         os.makedirs(path, exist_ok=True)
         dictionary_paths = MfaDictionaryGeneratorPaths(path)
-        return pandas.DataFrame(self.execute(dictionary_paths),
-                                columns=["path", "contents", "character"])
+        return pandas.DataFrame(
+            self.execute(dictionary_paths), columns=["path", "contents", "character"]
+        )
 
 
 class MfaCorpus:
@@ -113,7 +118,7 @@ class MfaCorpus:
         self.transcribed_audio = []
 
     def load_transcribed_audio(self, pandas):
-        """ 
+        """
 
         The pandas frame must have the following columns:
             - audio_path
@@ -125,10 +130,8 @@ class MfaCorpus:
     def dump(self, path):
         os.makedirs(path, exist_ok=True)
         transcript_data = pandas.concat(self.transcribed_audio)
-        transcript_data = transcript_data[
-            transcript_data['audio_path'].notna()]
-        transcript_data = transcript_data[
-            transcript_data['transcript'].notna()]
+        transcript_data = transcript_data[transcript_data["audio_path"].notna()]
+        transcript_data = transcript_data[transcript_data["transcript"].notna()]
 
         total_count = transcript_data.shape[0]
         characters = set()
@@ -153,8 +156,7 @@ class MfaCorpus:
             out_audio_path = f"{path}/{character}/{index}.wav"
             out_textgrid_path = f"{path}/{character}/{index}.textgrid"
 
-            if os.path.exists(out_audio_path) and os.path.exists(
-                    out_textgrid_path):
+            if os.path.exists(out_audio_path) and os.path.exists(out_textgrid_path):
                 return
 
             data, rate = librosa.load(audio_path, sr=16000)
@@ -168,21 +170,23 @@ class MfaCorpus:
 
         Parallel(n_jobs=-1, prefer="threads")(
             delayed(_dump_single)(row)
-            for row in tqdm.tqdm(transcript_data.itertuples(),
-                                 total=total_count,
-                                 desc="Creating MFA corpus"))
+            for row in tqdm.tqdm(
+                transcript_data.itertuples(),
+                total=total_count,
+                desc="Creating MFA corpus",
+            )
+        )
 
         def _gen():
             for character in characters:
                 yield [f"{path}/{character}", "mfa_corpus", character]
 
-        return pandas.DataFrame(_gen(),
-                                columns=["path", "contents", "character"])
+        return pandas.DataFrame(_gen(), columns=["path", "contents", "character"])
 
 
 class AlignmentPaths:
     def __init__(self, path):
-        self.dictionary = f'{path}/dictionary.txt'
+        self.dictionary = f"{path}/dictionary.txt"
 
 
 class MfaAlignments:
@@ -206,50 +210,60 @@ class MfaAlignments:
         # with acoustic model (cd /opt/mfa/; /opt/mfa/bin/mfa_train_and_align -v /home/celestia/mfa_corpus/Adachi\ Tohru/ /home/celestia/align-tmp/dictionary.txt /home/celestia/mfa_alignments/adachi)
         # todo: have mfa output the model to a target directory
 
-    def dump(self,
-             path,
-             acoustic_model='/opt/mfa/pretrained_models/english.zip'):
-        print('dumping alignments')
+    def dump(self, path, acoustic_model="/opt/mfa/pretrained_models/english.zip"):
+        print("dumping alignments")
         # open a temp directory
         # need utility class for dealing with temp directories
 
         # create dictionary path
-        dictionary_path = ''  #...
+        dictionary_path = ""  # ...
         dictionary_data = pandas.concat(self.dictionaries)
-        dictionary_data.to_csv(dictionary_path,
-                               sep='\t',
-                               index=False,
-                               header=False)
+        dictionary_data.to_csv(dictionary_path, sep="\t", index=False, header=False)
 
         corpus = pandas.concat(self.corpus)
 
         def _dump_single(character, corpus, mfa_cache_path):
-            mfa_cache_path = ''  # ...
+            mfa_cache_path = ""  # ...
             if corpus.shape[0] == 1:
                 corpus_path = corpus.path
             else:
                 print(
-                    'warning: case where a corpus is split across directories is not yet supported'
+                    "warning: case where a corpus is split across directories is not yet supported"
                 )
                 # paths.corpus = '/home/celestia/align-tmp/adachi'
                 # copy data into corpus_path
                 return
 
             if acoustic_model:
-                subprocess.run([
-                    '/opt/mfa/bin/mfa_align', '-v', '-t', mfa_cache_path,
-                    corpus_path, dictionary_path, acoustic_model,
-                    f'{path}/{character}'
-                ])
+                subprocess.run(
+                    [
+                        "/opt/mfa/bin/mfa_align",
+                        "-v",
+                        "-t",
+                        mfa_cache_path,
+                        corpus_path,
+                        dictionary_path,
+                        acoustic_model,
+                        f"{path}/{character}",
+                    ]
+                )
             else:
-                subprocess.run([
-                    '/opt/mfa/bin/mfa_train_and_align', '-v', '-t', mfa_cache_path,
-                    corpus_path, dictionary_path, f'{path}/{character}'
-                ])
+                subprocess.run(
+                    [
+                        "/opt/mfa/bin/mfa_train_and_align",
+                        "-v",
+                        "-t",
+                        mfa_cache_path,
+                        corpus_path,
+                        dictionary_path,
+                        f"{path}/{character}",
+                    ]
+                )
 
-        Parallel(n_jobs=-1, prefer='threads')(
+        Parallel(n_jobs=-1, prefer="threads")(
             delayed(_dump_single)(character, corpus)
-            for character, corpus in tqdm(corpus.groupby(by=['character'])))
+            for character, corpus in tqdm(corpus.groupby(by=["character"]))
+        )
 
         # return new dumps + self.alignments, remove duplicates
 

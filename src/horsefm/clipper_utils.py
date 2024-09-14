@@ -12,6 +12,7 @@ class ParseError(Exception):
 def load_ponysorter_data(context, path, label_data):
     character_key = label_data["character"]
     character = context.characters(character_key, path)
+    gender = context.genders(character, path)
 
     # get tags
 
@@ -28,6 +29,7 @@ def load_ponysorter_data(context, path, label_data):
         "start": label_data["start"],
         "end": label_data["end"],
         "character": character,
+        "gender": gender,
         "tags": tags,
         "noise": noise,
         "transcript": label_data["transcript"],
@@ -47,6 +49,7 @@ def load_audacity_data(context, line_data, path):
     # get character name
     character_key = label_parts[3]
     character = context.characters(character_key, path)
+    gender = context.genders(character, path)
 
     # get tags
     if label_parts[4] == "Canterlot Voice":
@@ -67,6 +70,7 @@ def load_audacity_data(context, line_data, path):
         "start": start,
         "end": end,
         "character": character,
+        "gender": gender,
         "tags": tags,
         "noise": noise_level,
         "transcript": transcript,
